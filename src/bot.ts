@@ -42,7 +42,11 @@ async function handleMessage(update: Update) {
   console.log('[telegram] message', { chatId, text, from: msg.from?.username ?? msg.from?.first_name });
 
   if (text.startsWith('/start')) {
-    await sendMessage(chatId, 'Whale Alert MVP ready. Commands: /signals, /topbuy, /topsell, /token SOL, /refresh, /dashboard, /chatid', dashboardMarkup());
+    await sendMessage(chatId, 'Whale Alert MVP ready. Ketik /help untuk list command lengkap.', dashboardMarkup());
+    return;
+  }
+  if (text.startsWith('/help')) {
+    await sendMessage(chatId, helpText(), dashboardMarkup());
     return;
   }
   if (text.startsWith('/dashboard')) {
@@ -80,6 +84,24 @@ async function handleMessage(update: Update) {
       await sendMessage(chatId, `Refresh gagal: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+}
+
+function helpText() {
+  return [
+    '🦈 aveclawmonitor_bot commands',
+    '',
+    '/signals - Top 10 whale signals',
+    '/topbuy - Top BUY accumulation setups',
+    '/topsell - Top SELL/distribution setups',
+    '/token SOL - Detail signal per token',
+    '/refresh - Refresh top 50 market data',
+    '/dashboard - Open web dashboard',
+    '/chatid - Show your Telegram chat ID',
+    '/help - Show this command list',
+    '',
+    'Tip: pakai /token BTC, /token ETH, /token SOL buat quick lookup.',
+    'NFA. Always verify dashboard context before entry.',
+  ].join('\n');
 }
 
 async function pollOnce() {
