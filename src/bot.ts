@@ -19,8 +19,14 @@ async function tg<T>(method: string, body?: Record<string, unknown>): Promise<T>
   return data.result;
 }
 
-async function sendMessage(chatId: number | string, text: string) {
-  return tg('sendMessage', { chat_id: chatId, text, disable_web_page_preview: true });
+function dashboardMarkup(symbol?: string) {
+  if (!config.dashboardUrl) return undefined;
+  const url = symbol ? `${config.dashboardUrl}?token=${encodeURIComponent(symbol.toUpperCase())}` : config.dashboardUrl;
+  return { inline_keyboard: [[{ text: '🚀 Open Dashboard', url }]] };
+}
+
+async function sendMessage(chatId: number | string, text: string, replyMarkup?: unknown) {
+  return tg('sendMessage', { chat_id: chatId, text, disable_web_page_preview: true, reply_markup: replyMarkup });
 }
 
 type Update = {
@@ -36,7 +42,11 @@ async function handleMessage(update: Update) {
   console.log('[telegram] message', { chatId, text, from: msg.from?.username ?? msg.from?.first_name });
 
   if (text.startsWith('/start')) {
-    await sendMessage(chatId, 'Whale Alert MVP ready. Commands: /signals, /topbuy, /topsell, /token SOL, /refresh, /chatid');
+    await sendMessage(chatId, 'Whale Alert MVP ready. Commands: /signals, /topbuy, /topsell, /token SOL, /refresh, /dashboard, /chatid', dashboardMarkup());
+    return;
+  }
+  if (text.startsWith('/dashboard')) {
+    await sendMessage(chatId, config.dashboardUrl ? `Dashboard: ${config.dashboardUrl}` : 'Dashboard URL belum diset di DASHBOARD_URL.', dashboardMarkup());
     return;
   }
   if (text.startsWith('/chatid')) {
@@ -44,7 +54,7 @@ async function handleMessage(update: Update) {
     return;
   }
   if (text.startsWith('/signals')) {
-    await sendMessage(chatId, formatTop(getSignals(), '🐋 Top 10 Signals'));
+    await sendMessage(chatId, formatTop(getSignals(), '🦈 Top 10 Signals'), dashboardMarkup());
     return;
   }
   if (text.startsWith('/topbuy')) {
@@ -58,7 +68,7 @@ async function handleMessage(update: Update) {
   if (text.startsWith('/token')) {
     const symbol = text.split(/\s+/)[1];
     const signal = symbol ? getSignal(symbol) : undefined;
-    await sendMessage(chatId, signal ? formatSignal(signal) : `Token ${symbol ?? ''} belum ada di top ${config.topN}.`);
+    await sendMessage(chatId, signal ? formatSignal(signal) : `Token ${symbol ?? ''} belum ada di top ${config.topN}.`, dashboardMarkup(symbol));
     return;
   }
   if (text.startsWith('/refresh')) {
