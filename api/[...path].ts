@@ -3,17 +3,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 const ORIGIN = process.env.WHALE_API_ORIGIN ?? 'http://37.60.252.176:8787';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const rawPath = req.query.path;
-  const path = Array.isArray(rawPath) ? rawPath.join('/') : rawPath ?? '';
-  const search = new URLSearchParams();
-
-  for (const [key, value] of Object.entries(req.query)) {
-    if (key === 'path') continue;
-    if (Array.isArray(value)) value.forEach((item) => search.append(key, item));
-    else if (value !== undefined) search.append(key, value);
-  }
-
-  const target = `${ORIGIN.replace(/\/$/, '')}/api/${path}${search.size ? `?${search}` : ''}`;
+  const requestUrl = new URL(String(req.url ?? '/api'), 'http://vercel.local');
+  const path = requestUrl.pathname.replace(/^\/api\/?/, '');
+  const target = `${ORIGIN.replace(/\/$/, '')}/api/${path}${requestUrl.search}`;
 
   try {
     const upstream = await fetch(target, {
