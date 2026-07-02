@@ -15,6 +15,7 @@ export function formatSignal(signal: Signal): string {
     `Vol/MCap: ${(signal.volMcap * 100).toFixed(1)}%`,
   ];
   if (signal.futures?.fundingRate !== undefined) lines.push(`Funding: ${(signal.futures.fundingRate * 100).toFixed(4)}% | OI: ${usd(signal.futures.openInterestUsd)}`);
+  if (signal.marketStructure) lines.push(`CVD 15m: ${usd(signal.marketStructure.cvdUsd15m)} | Depth 1%: ${signal.marketStructure.depthImbalance1Pct.toFixed(2)}x bid/ask`);
   if (signal.reasons.length) lines.push(`\nWhy:\n- ${signal.reasons.join('\n- ')}`);
   if (signal.warnings.length) lines.push(`\nRisk:\n- ${signal.warnings.join('\n- ')}`);
   lines.push(`\nEvidence:\n${formatEvidence(signal)}`);

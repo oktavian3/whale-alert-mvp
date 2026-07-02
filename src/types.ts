@@ -33,6 +33,29 @@ export interface EvidenceItem {
   url?: string;
 }
 
+export interface MarketStructureMetric {
+  symbol: string;
+  source: string;
+  updatedAt: string;
+  cvdUsd15m: number;
+  buyUsd15m: number;
+  sellUsd15m: number;
+  bidUsd1Pct: number;
+  askUsd1Pct: number;
+  bidUsd2Pct: number;
+  askUsd2Pct: number;
+  depthImbalance1Pct: number;
+  liquidationUsd15m?: number;
+}
+
+export interface DataSourceHealth {
+  name: string;
+  status: 'LIVE' | 'DELAYED' | 'MISSING';
+  lastOk?: string;
+  lastError?: string;
+  note?: string;
+}
+
 export interface Signal {
   id: string;
   coin: CoinMarket;
@@ -46,5 +69,6 @@ export interface Signal {
   warnings: string[];
   evidence: EvidenceItem[];
   futures?: FuturesMetric;
+  marketStructure?: MarketStructureMetric;
   updatedAt: string;
 }

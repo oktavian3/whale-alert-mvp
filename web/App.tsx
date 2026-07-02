@@ -8,7 +8,10 @@ type Signal = {
   bias: Bias; signal:string; score:number; stage:string; confidence:string; volMcap:number; reasons:string[]; warnings:string[]; updatedAt:string;
   evidence?: { source:string; label:string; value:string; txHash?:string; url?:string }[];
   futures?: { symbol:string; fundingRate:number; openInterestUsd:number; source:string };
+  marketStructure?: { cvdUsd15m:number; buyUsd15m:number; sellUsd15m:number; bidUsd1Pct:number; askUsd1Pct:number; depthImbalance1Pct:number; liquidationUsd15m?:number; updatedAt:string; source:string };
 };
+
+type SourceHealth = { name:string; status:'LIVE'|'DELAYED'|'MISSING'; lastOk?:string; lastError?:string; note?:string };
 
 function App() {
   const [signals, setSignals] = useState<Signal[]>([]);
@@ -16,11 +19,13 @@ function App() {
   const [sort, setSort] = useState('score');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Signal | null>(null);
+  const [sources, setSources] = useState<SourceHealth[]>([]);
 
   async function load() {
     const res = await fetch('/api/signals');
     const data = await res.json();
     setSignals(data.signals ?? []);
+    setSources(data.status?.sources ?? []);
   }
 
   useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
@@ -54,6 +59,8 @@ function App() {
 
     <section className="kpis"><Kpi title="BUY" value={counts.buy} tone="green"/><Kpi title="SELL" value={counts.sell} tone="red"/><Kpi title="WATCH" value={counts.watch} tone="amber"/><Kpi title="High Vol/MCap" value={signals.filter(s=>s.volMcap>.2).length} tone="blue"/></section>
 
+    <section className="sourceStrip">{sources.map((source) => <div className={`source ${source.status.toLowerCase()}`} key={source.name}><b>{source.status}</b><span>{source.name}</span><small>{source.note}</small></div>)}</section>
+
     <nav className="filters">{['ALL','BUY','SELL','WATCH','EARLY','MID','LATE','RISK','AKUMULASI','DISTRIBUSI'].map(f => <button className={filter===f?'active':''} onClick={() => setFilter(f)}>{f}</button>)}</nav>
 
     <section className="layout">
@@ -77,11 +84,11 @@ function SignalCard({ signal:s, onClick }:{ signal:Signal; onClick:()=>void }) {
 function Detail({ signal:s, onClose }:{ signal:Signal; onClose:()=>void }) {
   return <aside className="drawer"><button onClick={onClose}>Close</button><h2>{s.coin.name} Detail</h2>
     <div className="detailHero"><img src={s.coin.image}/><div><b>{s.bias} · {s.signal}</b><p>Score {s.score}/100 · {s.confidence} · {s.stage}</p></div></div>
-    <div className="detailGrid"><span>Price <em>${num(s.coin.current_price)}</em></span><span>Market Cap <em>${compact(s.coin.market_cap)}</em></span><span>Volume <em>${compact(s.coin.total_volume)}</em></span><span>ATH Gap <em>{pct(s.coin.ath_change_percentage)}</em></span><span>Funding <em>{s.futures ? `${(s.futures.fundingRate*100).toFixed(4)}%` : '-'}</em></span><span>Open Interest <em>${compact(s.futures?.openInterestUsd ?? 0)}</em></span></div>
+    <div className="detailGrid"><span>Price <em>${num(s.coin.current_price)}</em></span><span>Market Cap <em>${compact(s.coin.market_cap)}</em></span><span>Volume <em>${compact(s.coin.total_volume)}</em></span><span>ATH Gap <em>{pct(s.coin.ath_change_percentage)}</em></span><span>Funding <em>{s.futures ? `${(s.futures.fundingRate*100).toFixed(4)}%` : '-'}</em></span><span>Open Interest <em>${compact(s.futures?.openInterestUsd ?? 0)}</em></span><span>CVD 15m <em>${compact(s.marketStructure?.cvdUsd15m ?? 0)}</em></span><span>Depth 1% <em>{s.marketStructure ? `${s.marketStructure.depthImbalance1Pct.toFixed(2)}x` : '-'}</em></span></div>
     <h3>Signal Thesis</h3><ul>{s.reasons.map((r) => <li>{r}</li>)}</ul>
     <h3>Risk / Invalidation</h3><ul>{s.warnings.length ? s.warnings.map((r) => <li>{r}</li>) : <li>No major warning from current rule engine.</li>}<li>Invalid if CVD flips negative + bid depth disappears once order-flow module is active.</li></ul>
     <h3>Evidence / TxHash</h3><div className="evidenceBox">{(s.evidence ?? []).map((e) => <p><b>{e.source}</b> · {e.label}: <em>{e.value}</em>{e.txHash ? <code>{e.txHash}</code> : null}</p>)}{!(s.evidence ?? []).some(e => e.txHash) && <p className="muted">TxHash: N/A — ini market/futures signal, belum ada on-chain whale tx terverifikasi.</p>}</div>
-    <h3>Module Status</h3><div className="moduleGrid"><span className="on">Market data live</span><span className="on">Funding/OI partial</span><span>CVD next</span><span>Liquidation next</span><span>Wallet tracker next</span><span>Social ignition next</span></div>
+    <h3>Module Status</h3><div className="moduleGrid"><span className="on">Market data live</span><span className="on">Funding/OI partial</span><span className={s.marketStructure?'on':''}>CVD 15m {s.marketStructure?'live':'missing'}</span><span className={s.marketStructure?'on':''}>Depth 1% {s.marketStructure?'live':'missing'}</span><span>Wallet tracker next</span><span>Social ignition next</span></div>
   </aside>
 }
 

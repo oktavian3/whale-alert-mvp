@@ -1,4 +1,4 @@
-import type { Bias, CoinMarket, FuturesMetric, Signal, Stage } from './types.js';
+import type { Bias, CoinMarket, FuturesMetric, MarketStructureMetric, Signal, Stage } from './types.js';
 
 function n(value: number | null | undefined): number {
   return Number.isFinite(value) ? Number(value) : 0;
@@ -19,7 +19,7 @@ function stageFrom(coin: CoinMarket, volMcap: number, fundingRate = 0): Stage {
   return 'MID';
 }
 
-export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric): Signal {
+export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric, marketStructure?: MarketStructureMetric): Signal {
   const h1 = n(coin.price_change_percentage_1h_in_currency);
   const h24 = n(coin.price_change_percentage_24h_in_currency);
   const d7 = n(coin.price_change_percentage_7d_in_currency);
@@ -38,6 +38,13 @@ export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric): Signal {
       { source: 'Binance Futures', label: 'Open interest', value: `$${Math.round(futures.openInterestUsd ?? 0).toLocaleString('en-US')}` },
     );
   }
+  if (marketStructure) {
+    evidence.push(
+      { source: 'Binance Spot', label: 'CVD 15m', value: `$${Math.round(marketStructure.cvdUsd15m).toLocaleString('en-US')}` },
+      { source: 'Binance Spot', label: 'Bid/Ask depth 1%', value: `${marketStructure.depthImbalance1Pct.toFixed(2)}x` },
+      { source: 'Binance Futures', label: 'Liquidations 15m', value: `$${Math.round(marketStructure.liquidationUsd15m ?? 0).toLocaleString('en-US')} (best-effort free endpoint)` },
+    );
+  }
   let score = 25;
 
   if (volMcap > 0.1) { score += 18; reasons.push(`Vol/MCap ${(volMcap * 100).toFixed(1)}% abnormal`); }
@@ -48,6 +55,10 @@ export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric): Signal {
   if (coin.ath_change_percentage && coin.ath_change_percentage < -45) { score += 8; reasons.push('Jauh dari ATH - reversal potential'); }
   if (Math.abs(funding) < 0.0002 && futures) { score += 7; reasons.push('Funding netral'); }
   if (funding > 0.0006) { score -= 15; warnings.push('Funding panas: risk crowded long'); }
+  if (marketStructure?.cvdUsd15m && marketStructure.cvdUsd15m > 250000) { score += 10; reasons.push(`Spot CVD 15m positif $${Math.round(marketStructure.cvdUsd15m).toLocaleString('en-US')}`); }
+  if (marketStructure?.cvdUsd15m && marketStructure.cvdUsd15m < -250000) { score -= 10; warnings.push(`Spot CVD 15m negatif $${Math.round(marketStructure.cvdUsd15m).toLocaleString('en-US')}`); }
+  if (marketStructure?.depthImbalance1Pct && marketStructure.depthImbalance1Pct > 1.4) { score += 8; reasons.push(`Bid depth 1% dominan ${marketStructure.depthImbalance1Pct.toFixed(2)}x`); }
+  if (marketStructure?.depthImbalance1Pct && marketStructure.depthImbalance1Pct < 0.7) { warnings.push(`Ask depth 1% dominan ${(1 / Math.max(marketStructure.depthImbalance1Pct, 0.01)).toFixed(2)}x`); }
 
   let bias: Bias = 'WATCH';
   let signal = 'Watchlist Setup';
@@ -79,6 +90,7 @@ export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric): Signal {
     warnings: warnings.slice(0, 4),
     evidence,
     futures,
+    marketStructure,
     updatedAt: new Date().toISOString(),
   };
 }
