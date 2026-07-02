@@ -6,6 +6,7 @@ type Bias = 'BUY' | 'SELL' | 'WATCH';
 type Signal = {
   coin: { id:string; symbol:string; name:string; image:string; current_price:number; market_cap:number; market_cap_rank:number; total_volume:number; price_change_percentage_1h_in_currency:number; price_change_percentage_24h_in_currency:number; price_change_percentage_7d_in_currency:number; ath_change_percentage:number };
   bias: Bias; signal:string; score:number; stage:string; confidence:string; volMcap:number; reasons:string[]; warnings:string[]; updatedAt:string;
+  evidence?: { source:string; label:string; value:string; txHash?:string; url?:string }[];
   futures?: { symbol:string; fundingRate:number; openInterestUsd:number; source:string };
 };
 
@@ -79,6 +80,7 @@ function Detail({ signal:s, onClose }:{ signal:Signal; onClose:()=>void }) {
     <div className="detailGrid"><span>Price <em>${num(s.coin.current_price)}</em></span><span>Market Cap <em>${compact(s.coin.market_cap)}</em></span><span>Volume <em>${compact(s.coin.total_volume)}</em></span><span>ATH Gap <em>{pct(s.coin.ath_change_percentage)}</em></span><span>Funding <em>{s.futures ? `${(s.futures.fundingRate*100).toFixed(4)}%` : '-'}</em></span><span>Open Interest <em>${compact(s.futures?.openInterestUsd ?? 0)}</em></span></div>
     <h3>Signal Thesis</h3><ul>{s.reasons.map((r) => <li>{r}</li>)}</ul>
     <h3>Risk / Invalidation</h3><ul>{s.warnings.length ? s.warnings.map((r) => <li>{r}</li>) : <li>No major warning from current rule engine.</li>}<li>Invalid if CVD flips negative + bid depth disappears once order-flow module is active.</li></ul>
+    <h3>Evidence / TxHash</h3><div className="evidenceBox">{(s.evidence ?? []).map((e) => <p><b>{e.source}</b> · {e.label}: <em>{e.value}</em>{e.txHash ? <code>{e.txHash}</code> : null}</p>)}{!(s.evidence ?? []).some(e => e.txHash) && <p className="muted">TxHash: N/A — ini market/futures signal, belum ada on-chain whale tx terverifikasi.</p>}</div>
     <h3>Module Status</h3><div className="moduleGrid"><span className="on">Market data live</span><span className="on">Funding/OI partial</span><span>CVD next</span><span>Liquidation next</span><span>Wallet tracker next</span><span>Social ignition next</span></div>
   </aside>
 }

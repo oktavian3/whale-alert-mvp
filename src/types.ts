@@ -25,6 +25,14 @@ export interface FuturesMetric {
   source?: string;
 }
 
+export interface EvidenceItem {
+  source: string;
+  label: string;
+  value: string;
+  txHash?: string;
+  url?: string;
+}
+
 export interface Signal {
   id: string;
   coin: CoinMarket;
@@ -36,6 +44,7 @@ export interface Signal {
   volMcap: number;
   reasons: string[];
   warnings: string[];
+  evidence: EvidenceItem[];
   futures?: FuturesMetric;
   updatedAt: string;
 }

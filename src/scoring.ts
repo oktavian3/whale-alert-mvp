@@ -27,6 +27,17 @@ export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric): Signal {
   const funding = futures?.fundingRate ?? 0;
   const reasons: string[] = [];
   const warnings: string[] = [];
+  const evidence = [
+    { source: 'CoinGecko', label: 'Market rank', value: `#${coin.market_cap_rank}` },
+    { source: 'CoinGecko', label: '24H volume', value: `$${coin.total_volume.toLocaleString('en-US')}` },
+    { source: 'CoinGecko', label: 'Vol/MCap', value: `${(volMcap * 100).toFixed(1)}%` },
+  ];
+  if (futures) {
+    evidence.push(
+      { source: 'Binance Futures', label: 'Funding', value: `${(funding * 100).toFixed(4)}%` },
+      { source: 'Binance Futures', label: 'Open interest', value: `$${Math.round(futures.openInterestUsd ?? 0).toLocaleString('en-US')}` },
+    );
+  }
   let score = 25;
 
   if (volMcap > 0.1) { score += 18; reasons.push(`Vol/MCap ${(volMcap * 100).toFixed(1)}% abnormal`); }
@@ -66,6 +77,7 @@ export function scoreCoin(coin: CoinMarket, futures?: FuturesMetric): Signal {
     volMcap,
     reasons: reasons.slice(0, 5),
     warnings: warnings.slice(0, 4),
+    evidence,
     futures,
     updatedAt: new Date().toISOString(),
   };
