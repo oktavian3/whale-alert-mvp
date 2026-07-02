@@ -32,6 +32,15 @@ export async function loadLatestSignals(): Promise<Signal[]> {
   }
 }
 
+export async function loadSignalSnapshots(limit = 80): Promise<Array<{ savedAt: string; signals: Signal[] }>> {
+  try {
+    const raw = await readFile(snapshotsPath, 'utf8');
+    return raw.trim().split('\n').slice(-limit).map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+}
+
 export async function loadAlertState(): Promise<AlertState> {
   try {
     return JSON.parse(await readFile(alertStatePath, 'utf8')) as AlertState;
