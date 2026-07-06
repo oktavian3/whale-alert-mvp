@@ -21,7 +21,7 @@ function App() {
   const [filter, setFilter] = useState('ALL');
   const [sort, setSort] = useState('score');
   const [query, setQuery] = useState('');
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(() => new URLSearchParams(window.location.search).get('token') ?? '');
   const [series, setSeries] = useState<SeriesPoint[]>([]);
 
   async function load() {
@@ -36,6 +36,11 @@ function App() {
 
   useEffect(() => { load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, []);
   useEffect(() => { if (!selectedId) return; fetch(`/api/series/${selectedId}?limit=180`).then((res) => res.json()).then((data) => setSeries(data.points ?? [])).catch(() => setSeries([])); }, [selectedId, signals.length]);
+  function selectToken(id: string) {
+    setSelectedId(id);
+    window.history.replaceState(null, '', `?token=${id}`);
+  }
+
   const selected = signals.find((signal) => signal.coin.id === selectedId) ?? signals[0];
   const visible = useMemo(() => {
     const q = query.toLowerCase();
@@ -58,12 +63,12 @@ function App() {
     <nav className="filters">{['ALL','BUY','SELL','WATCH','EARLY','MID','LATE','RISK','AKUMULASI','DISTRIBUSI'].map(f => <button className={filter===f?'active':''} onClick={() => setFilter(f)} key={f}>{f}</button>)}</nav>
 
     <section className="terminalGrid">
-      <ScannerTable signals={visible} selectedId={selected?.coin.id} onSelect={setSelectedId} />
+      <ScannerTable signals={visible} selectedId={selected?.coin.id} onSelect={selectToken} />
       {selected && <DetailPanel signal={selected} series={series} />}
     </section>
 
     <section className="bottomDeck">
-      <EarlyBuys signals={earlyBuys} onSelect={setSelectedId} />
+      <EarlyBuys signals={earlyBuys} onSelect={selectToken} />
       <Timeline timeline={timeline} />
       <Playbook />
     </section>
