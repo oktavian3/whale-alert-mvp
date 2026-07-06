@@ -27,6 +27,27 @@ app.get('/api/timeline', async (req, res) => {
   });
   res.json({ timeline });
 });
+app.get('/api/series/:symbol', async (req, res) => {
+  const symbol = req.params.symbol.toLowerCase();
+  const limit = Math.max(20, Math.min(480, Number(req.query.limit ?? 180)));
+  const snapshots = await loadSignalSnapshots(limit);
+  const points = snapshots.map((snapshot) => {
+    const signal = snapshot.signals.find((item) => item.coin.symbol.toLowerCase() === symbol || item.coin.id.toLowerCase() === symbol);
+    if (!signal) return undefined;
+    return {
+      t: snapshot.savedAt,
+      price: signal.coin.current_price,
+      score: signal.score,
+      volMcap: signal.volMcap,
+      cvd: signal.marketStructure?.cvdUsd15m ?? 0,
+      depth: signal.marketStructure?.depthImbalance1Pct ?? 0,
+      oi: signal.futures?.openInterestUsd ?? 0,
+      funding: signal.futures?.fundingRate ?? 0,
+      bias: signal.bias,
+    };
+  }).filter(Boolean);
+  res.json({ symbol: symbol.toUpperCase(), points });
+});
 app.get('/api/signals/:symbol', (req, res) => {
   const signal = getSignal(req.params.symbol);
   if (!signal) return res.status(404).json({ error: 'Signal not found' });

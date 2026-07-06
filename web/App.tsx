@@ -12,6 +12,7 @@ type Signal = {
 };
 type SourceHealth = { name:string; status:'LIVE'|'DELAYED'|'MISSING'; lastOk?:string; lastError?:string; note?:string };
 type TimelinePoint = { savedAt:string; buy:number; sell:number; watch:number; avgScore:number; top:{symbol:string; bias:Bias; score:number; price:number; signal:string}[] };
+type SeriesPoint = { t:string; price:number; score:number; volMcap:number; cvd:number; depth:number; oi:number; funding:number; bias:Bias };
 
 function App() {
   const [signals, setSignals] = useState<Signal[]>([]);
@@ -21,6 +22,7 @@ function App() {
   const [sort, setSort] = useState('score');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState('');
+  const [series, setSeries] = useState<SeriesPoint[]>([]);
 
   async function load() {
     const [signalsRes, timelineRes] = await Promise.all([fetch('/api/signals'), fetch('/api/timeline?limit=40')]);
@@ -32,7 +34,8 @@ function App() {
     if (!selectedId && data.signals?.[0]) setSelectedId(data.signals[0].coin.id);
   }
 
-  useEffect(() => { load(); const id = setInterval(load, 30000); return () => clearInterval(id); }, []);
+  useEffect(() => { load(); const id = setInterval(load, 10000); return () => clearInterval(id); }, []);
+  useEffect(() => { if (!selectedId) return; fetch(`/api/series/${selectedId}?limit=180`).then((res) => res.json()).then((data) => setSeries(data.points ?? [])).catch(() => setSeries([])); }, [selectedId, signals.length]);
   const selected = signals.find((signal) => signal.coin.id === selectedId) ?? signals[0];
   const visible = useMemo(() => {
     const q = query.toLowerCase();
@@ -42,6 +45,7 @@ function App() {
       .sort((a, b) => sortValue(b, sort) - sortValue(a, sort));
   }, [signals, filter, sort, query]);
   const counts = useMemo(() => ({ buy: signals.filter(s=>s.bias==='BUY').length, sell: signals.filter(s=>s.bias==='SELL').length, watch: signals.filter(s=>s.bias==='WATCH').length, avg: Math.round(signals.reduce((sum,s)=>sum+s.score,0)/Math.max(signals.length,1)) }), [signals]);
+  const earlyBuys = useMemo(() => signals.filter((s) => s.bias === 'BUY' && s.stage === 'EARLY').slice(0, 6), [signals]);
 
   return <main className="terminal">
     <header className="termHeader">
@@ -55,10 +59,11 @@ function App() {
 
     <section className="terminalGrid">
       <ScannerTable signals={visible} selectedId={selected?.coin.id} onSelect={setSelectedId} />
-      {selected && <DetailPanel signal={selected} />}
+      {selected && <DetailPanel signal={selected} series={series} />}
     </section>
 
     <section className="bottomDeck">
+      <EarlyBuys signals={earlyBuys} onSelect={setSelectedId} />
       <Timeline timeline={timeline} />
       <Playbook />
     </section>
@@ -69,8 +74,25 @@ function ScannerTable({ signals, selectedId, onSelect }:{signals:Signal[]; selec
   return <section className="scanner"><div className="tableHead"><span>Asset</span><span>Bias</span><span>Score</span><span>1H</span><span>24H</span><span>Vol/MCap</span><span>CVD 15m</span><span>Depth</span><span>OI</span><span>Funding</span></div>{signals.map((s)=><button className={`row ${s.bias.toLowerCase()} ${selectedId===s.coin.id?'selected':''}`} onClick={()=>onSelect(s.coin.id)} key={s.coin.id}><span className="asset"><img src={s.coin.image}/><b>{s.coin.symbol.toUpperCase()}</b><small>#{s.coin.market_cap_rank}</small></span><span>{s.bias}</span><span><Meter value={s.score}/></span><span className={tone(s.coin.price_change_percentage_1h_in_currency)}>{pct(s.coin.price_change_percentage_1h_in_currency)}</span><span className={tone(s.coin.price_change_percentage_24h_in_currency)}>{pct(s.coin.price_change_percentage_24h_in_currency)}</span><span>{(s.volMcap*100).toFixed(1)}%</span><span className={tone(s.marketStructure?.cvdUsd15m ?? 0)}>${compact(s.marketStructure?.cvdUsd15m ?? 0)}</span><span>{s.marketStructure ? `${s.marketStructure.depthImbalance1Pct.toFixed(2)}x` : '-'}</span><span>${compact(s.futures?.openInterestUsd ?? 0)}</span><span>{s.futures ? `${(s.futures.fundingRate*100).toFixed(4)}%` : '-'}</span></button>)}</section>
 }
 
-function DetailPanel({ signal:s }:{signal:Signal}) {
-  return <aside className="proPanel"><div className="detailHero"><img src={s.coin.image}/><div><p>{s.coin.name} / {s.coin.symbol.toUpperCase()}</p><h2>{s.bias} · {s.signal}</h2><span>Score {s.score}/100 · {s.confidence} · {s.stage}</span></div></div><div className="detailGrid"><Box k="Price" v={`$${num(s.coin.current_price)}`}/><Box k="Market Cap" v={`$${compact(s.coin.market_cap)}`}/><Box k="Volume" v={`$${compact(s.coin.total_volume)}`}/><Box k="ATH Gap" v={pct(s.coin.ath_change_percentage)}/><Box k="CVD 15m" v={`$${compact(s.marketStructure?.cvdUsd15m ?? 0)}`}/><Box k="Buy/Sell 15m" v={`${compact(s.marketStructure?.buyUsd15m ?? 0)} / ${compact(s.marketStructure?.sellUsd15m ?? 0)}`}/><Box k="Depth 1%" v={s.marketStructure ? `${s.marketStructure.depthImbalance1Pct.toFixed(2)}x` : '-'}/><Box k="Liq 15m" v={`$${compact(s.marketStructure?.liquidationUsd15m ?? 0)}`}/></div><h3>Why This Fired</h3><ul>{s.reasons.map((r)=><li key={r}>{r}</li>)}</ul><h3>Risk / Invalidation</h3><ul>{s.warnings.length ? s.warnings.map((r)=><li key={r}>{r}</li>) : <li>No major warning from current rule engine.</li>}<li>Invalid if CVD flips negative and bid depth disappears.</li></ul><h3>Evidence</h3><div className="evidenceBox">{(s.evidence ?? []).map((e)=><p key={`${e.source}-${e.label}`}><b>{e.source}</b> · {e.label}: <em>{e.value}</em>{e.txHash ? <code>{e.txHash}</code> : null}</p>)}{!(s.evidence ?? []).some(e=>e.txHash) && <p className="muted">TxHash: N/A — market/futures signal only, no verified on-chain whale transaction yet.</p>}</div></aside>
+function DetailPanel({ signal:s, series }:{signal:Signal; series:SeriesPoint[]}) {
+  return <aside className="proPanel"><div className="detailHero"><img src={s.coin.image}/><div><p>{s.coin.name} / {s.coin.symbol.toUpperCase()}</p><h2>{s.bias} · {s.signal}</h2><span>Score {s.score}/100 · {s.confidence} · {s.stage}</span></div></div><MiniCharts points={series} /><div className="detailGrid"><Box k="Price" v={`$${num(s.coin.current_price)}`}/><Box k="Market Cap" v={`$${compact(s.coin.market_cap)}`}/><Box k="Volume" v={`$${compact(s.coin.total_volume)}`}/><Box k="ATH Gap" v={pct(s.coin.ath_change_percentage)}/><Box k="CVD 15m" v={`$${compact(s.marketStructure?.cvdUsd15m ?? 0)}`}/><Box k="Buy/Sell 15m" v={`${compact(s.marketStructure?.buyUsd15m ?? 0)} / ${compact(s.marketStructure?.sellUsd15m ?? 0)}`}/><Box k="Depth 1%" v={s.marketStructure ? `${s.marketStructure.depthImbalance1Pct.toFixed(2)}x` : '-'}/><Box k="Liq 15m" v={`$${compact(s.marketStructure?.liquidationUsd15m ?? 0)}`}/></div><h3>Why This Fired</h3><ul>{s.reasons.map((r)=><li key={r}>{r}</li>)}</ul><h3>Risk / Invalidation</h3><ul>{s.warnings.length ? s.warnings.map((r)=><li key={r}>{r}</li>) : <li>No major warning from current rule engine.</li>}<li>Invalid if CVD flips negative and bid depth disappears.</li></ul><h3>Evidence</h3><div className="evidenceBox">{(s.evidence ?? []).map((e)=><p key={`${e.source}-${e.label}`}><b>{e.source}</b> · {e.label}: <em>{e.value}</em>{e.txHash ? <code>{e.txHash}</code> : null}</p>)}{!(s.evidence ?? []).some(e=>e.txHash) && <p className="muted">TxHash: N/A — market/futures signal only, no verified on-chain whale transaction yet.</p>}</div></aside>
+}
+
+function MiniCharts({ points }:{points:SeriesPoint[]}) {
+  return <div className="chartDeck"><Spark title="Price" points={points.map(p=>p.price)} tone="blue"/><Spark title="Score" points={points.map(p=>p.score)} tone="green"/><Spark title="CVD" points={points.map(p=>p.cvd)} tone="amber"/></div>
+}
+
+function Spark({ title, points, tone }:{title:string; points:number[]; tone:string}) {
+  const clean = points.slice(-60);
+  const min = Math.min(...clean, 0);
+  const max = Math.max(...clean, 1);
+  const range = max - min || 1;
+  const d = clean.map((value, index) => `${index === 0 ? 'M' : 'L'} ${(index / Math.max(clean.length - 1, 1)) * 100} ${38 - ((value - min) / range) * 34}`).join(' ');
+  return <div className={`spark ${tone}`}><span>{title}</span><svg viewBox="0 0 100 42" preserveAspectRatio="none"><path d={d}/></svg><b>{clean.length ? compact(clean[clean.length-1]) : '-'}</b></div>
+}
+
+function EarlyBuys({ signals, onSelect }:{signals:Signal[]; onSelect:(id:string)=>void}) {
+  return <section className="early"><h2>Early Buy Radar</h2>{signals.map((s)=><button key={s.coin.id} onClick={()=>onSelect(s.coin.id)}><b>{s.coin.symbol.toUpperCase()}</b><span>{s.score}/100 · {s.signal}</span><small>CVD ${compact(s.marketStructure?.cvdUsd15m ?? 0)} · Depth {s.marketStructure ? `${s.marketStructure.depthImbalance1Pct.toFixed(2)}x` : '-'}</small></button>)}</section>
 }
 
 function Timeline({ timeline }:{timeline:TimelinePoint[]}) {
